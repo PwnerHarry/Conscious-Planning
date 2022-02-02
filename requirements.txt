@@ -5,3 +5,4 @@ gym
 cpprb
 tensorboardx
 psutil
+tensorflow_probability

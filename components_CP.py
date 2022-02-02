@@ -152,7 +152,7 @@ class MODEL_TRANSITION(tf.keras.Model):
         self.predictor_reward_term = ESTIMATOR_REWARD_TERM2(len_object=self.len_object, len_action=self.len_action, width_pool=width_pool, depth_transformer=depth_reward_term_predictor, value_min=reward_min, value_max=reward_max, atoms=atoms_reward, transform=transform_reward, norm=norm, n_head=n_head)
         if self.conscious:
             self.compressor = COMPRESSOR_SET(len_object=self.len_object, depth_transformer=1, n_head=self.n_head, QKV_depth=QKV_depth, QKV_width=QKV_width, size_bottleneck=self.n, len_action=self.len_action, norm=self.norm, FC_width=FC_width, type_attention=type_attention)
-            self.decompressor = DECOMPRESSOR_SET(len_object=self.len_object, len_feature=self.len_feature, n_head=self.n_head, QKV_depth=QKV_depth, QKV_width=QKV_width, len_action=self.len_action, size_bottleneck=self.n)
+            self.decompressor = DECOMPRESSOR_SET(len_object=self.len_object, n_head=self.n_head, QKV_depth=QKV_depth, QKV_width=QKV_width)
         if self.noise_inject:
             import tensorflow_probability as tfp
             self.dist_noise = tfp.distributions.MultivariateNormalDiag(loc=tf.zeros(self.len_latent), scale_diag=tf.ones(self.len_latent), validate_args=False, allow_nan_stats=True)
@@ -179,7 +179,7 @@ class MODEL_TRANSITION(tf.keras.Model):
         if self.conscious:
             subset_curr, weights_att_compress = self.compressor(objects_curr, ebd_action)
             subset_imagined = self.rollout_dynamics(subset_curr, ebd_action)
-            objects_imagined = self.decompressor(objects_curr, subset_imagined, ebd_action)
+            objects_imagined = self.decompressor(objects_curr, subset_imagined)
             features_imagined = self.downscaler(objects_imagined)
             reward_dist_imagined, term_logits_imagined = self.predictor_reward_term(subset_curr, ebd_action, subset_imagined, predict_reward=predict_reward, predict_term=predict_term)
         else:
@@ -213,7 +213,7 @@ class MODEL_TRANSITION(tf.keras.Model):
         if self.conscious:
             subset_curr, _ = self.compressor(objects_curr, ebd_action)
             subset_imagined = self.rollout_dynamics(subset_curr, ebd_action)
-            objects_imagined = self.decompressor(objects_curr, subset_imagined, ebd_action)
+            objects_imagined = self.decompressor(objects_curr, subset_imagined)
             features_imagined = self.downscaler(objects_imagined)
             reward_dist_imagined, term_logits_imagined = self.predictor_reward_term(subset_curr, ebd_action, subset_imagined)
         else:
@@ -261,7 +261,7 @@ class MODEL_TRANSITION_MINIGRIDOBS(tf.keras.Model): # TODO: implement the observ
         self.predictor_reward_term = ESTIMATOR_REWARD_TERM2(len_object=self.len_object, len_action=self.len_action, width_pool=width_pool, depth_transformer=depth_reward_term_predictor, value_min=reward_min, value_max=reward_max, atoms=atoms_reward, transform=transform_reward, norm=norm, n_head=n_head)
         if self.conscious:
             self.compressor = COMPRESSOR_SET(len_object=self.len_object, depth_transformer=1, n_head=self.n_head, QKV_depth=QKV_depth, QKV_width=QKV_width, size_bottleneck=self.n, len_action=self.len_action, norm=self.norm, FC_width=FC_width, type_attention=type_attention)
-            self.decompressor = DECOMPRESSOR_SET(len_object=self.len_object, len_feature=self.len_feature, n_head=self.n_head, QKV_depth=QKV_depth, QKV_width=QKV_width, len_action=self.len_action, size_bottleneck=self.n)
+            self.decompressor = DECOMPRESSOR_SET(len_object=self.len_object, n_head=self.n_head, QKV_depth=QKV_depth, QKV_width=QKV_width)
         self.tail_feature = tf.constant(tf.zeros([1, self.m, len_feature - 3], dtype=tf.float32))
 
     @tf.function
@@ -274,7 +274,7 @@ class MODEL_TRANSITION_MINIGRIDOBS(tf.keras.Model): # TODO: implement the observ
         if self.conscious:
             subset_curr, _ = self.compressor(objects_curr, ebd_actions)
             subset_imagined = self.rollout_dynamics(subset_curr, ebd_actions)
-            objects_imagined = self.decompressor(objects_curr, subset_imagined, ebd_actions)
+            objects_imagined = self.decompressor(objects_curr, subset_imagined)
             features_imagined = self.downscaler(objects_imagined)
             reward_dist_imagined, term_logits_imagined = self.predictor_reward_term(subset_curr, ebd_actions, subset_imagined, predict_reward=predict_reward, predict_term=predict_term)
         else:
@@ -294,7 +294,7 @@ class MODEL_TRANSITION_MINIGRIDOBS(tf.keras.Model): # TODO: implement the observ
         if self.conscious:
             subset_curr, _ = self.compressor(objects_curr, ebd_actions)
             subset_imagined = self.rollout_dynamics(subset_curr, ebd_actions)
-            objects_imagined = self.decompressor(objects_curr, subset_imagined, ebd_actions)
+            objects_imagined = self.decompressor(objects_curr, subset_imagined)
             features_imagined = self.downscaler(objects_imagined)
             reward_dist_imagined, term_logits_imagined = self.predictor_reward_term(subset_curr, ebd_actions, subset_imagined)
         else:
@@ -334,16 +334,15 @@ class COMPRESSOR_SET(tf.keras.layers.Layer):
         return subset, weights_attention
 
 class DECOMPRESSOR_SET(tf.keras.layers.Layer): #TODO: to be tested!
-    def __init__(self, len_object=64, len_feature=56, n_head=8, QKV_depth=1, QKV_width=64, len_action=8, size_bottleneck=8, residual=False):
+    def __init__(self, len_object=64, n_head=8, QKV_depth=1, QKV_width=64, residual=False):
         super(DECOMPRESSOR_SET, self).__init__(name='decompressor_set')
-        self.len_feature, self.len_object, self.len_action = len_feature, len_object, len_action
+        self.len_object = len_object
         self.residual = residual
         self.self_attn = MultiHeadAttention(len_object, n_head, QKV_depth=QKV_depth, QKV_width=QKV_width)
 
     @tf.function
-    def __call__(self, objects_in, subset, ebd_action):
-        objects_augmented = tf.concat([objects_in, tf.repeat(tf.reshape(ebd_action, [objects_in.shape[0], 1, self.len_action]), objects_in.shape[1], axis=1)], axis=-1) # tf.nn.relu(objects_in)
-        objects_tmp, _ = self.self_attn(subset, subset, objects_augmented) # V, K, Q
+    def __call__(self, objects_in, subset):
+        objects_tmp, _ = self.self_attn(subset, subset, objects_in) # V, K, Q
         return objects_in + objects_tmp if self.residual else objects_tmp
 
 class ESTIMATOR_REWARD_TERM2(tf.keras.layers.Layer):
