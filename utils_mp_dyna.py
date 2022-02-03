@@ -185,11 +185,13 @@ def learner_dyna(global_rb, global_rb_imagined, queues, steps_interact, episodes
             except:
                 print('queue.put_nowait exception')
             episode_last_eval += args.freq_eval
-        if agent.steps_processed >= min(args.steps_stop, args.steps_max) or episodes_interact_curr >= args.episodes_max:
-            event_terminate.set()
         if not flag_need_update:
             with signal_explore.get_lock(): signal_explore.value = True
             writer.flush()
+        if agent.steps_processed >= min(args.steps_stop, args.steps_max) or episodes_interact_curr >= args.episodes_max:
+            event_terminate.set()
+            break
+        
 
 def prepare_experiment(env, args):
     SyncManager.register('SummaryWriter', SummaryWriter)

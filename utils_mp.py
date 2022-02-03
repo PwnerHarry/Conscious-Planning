@@ -237,10 +237,14 @@ def explorer(global_rb, kwargs_local, queue, queue_envs_train, steps_interact, e
                     global_rb.add(**samples_local)
                 with steps_interact.get_lock(): steps_interact.value += size_local_rb
                 agent.steps_interact = steps_interact.value
-                while not signal_explore.value and not event_terminate.is_set(): time.sleep(0.0001)
+                if event_terminate.is_set():
+                    break
+                while not signal_explore.value: time.sleep(0.0001)
         if writer is not None:
             writer.add_scalar('Performance/train', return_cum, steps_interact_curr)
             writer.add_scalar('Other/episodes', episodes_interact_curr, steps_interact_curr)
+        if event_terminate.is_set():
+            break
         with episodes_interact.get_lock(): episodes_interact.value += 1
         if flag_newenvs:
             del env
@@ -356,6 +360,7 @@ def learner(global_rb, queues, steps_interact, episodes_interact, event_terminat
             episode_last_eval += args.freq_eval
         if agent.steps_processed >= min(args.steps_stop, args.steps_max) or episodes_interact_curr >= args.episodes_max:
             event_terminate.set()
+            break
 
 def evaluator(steps_interact, event_terminate, queue, queue_envs_eval, args, func_env, writer):
     if args.gpu_evaluator:
@@ -408,6 +413,8 @@ def evaluator(steps_interact, event_terminate, queue, queue_envs_eval, args, fun
                 evaluate_agent_mp(lambda : func_env(args), agent, num_episodes=20, suffix='_best', type_env=type_env, step_record=None, queue_envs=queue_envs_eval, heuristic='best_first')
                 agent.steps_interact, agent.step_last_record_ts = steps_interact, steps_interact
                 evaluate_agent_mp(lambda : func_env(args), agent, num_episodes=20, suffix='_modelfree', disable_planning=True, type_env=type_env, step_record=None, queue_envs=queue_envs_eval)
+        if event_terminate.is_set():
+            break
 
 def run_multiprocess(args, func_env_train, func_env_eval):
     pid_main = os.getpid()
